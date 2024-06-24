@@ -165,6 +165,8 @@ echo "cp /opt/secureptt/pttcomm.service /etc/systemd/system/" >> $CREATE_PATH/bo
 echo "cp /opt/secureptt/samplicator.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
 echo "cp /opt/secureptt/netmon.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
 echo "cp /opt/secureptt/netmon-tx.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/dpinger.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/dpinger-monitor.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
 echo " " >> $CREATE_PATH/bootstrap.sh
 echo "systemctl daemon-reload" >> $CREATE_PATH/bootstrap.sh
 # sleep 5
@@ -212,6 +214,7 @@ echo "systemctl restart pttcomm" >> $CREATE_PATH/bootstrap-start.sh
 echo "systemctl restart samplicator.service" >> $CREATE_PATH/bootstrap-start.sh
 echo "systemctl restart netmon" >> $CREATE_PATH/bootstrap-start.sh
 echo "systemctl restart netmon-tx" >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart dpinger" >> $CREATE_PATH/bootstrap-start.sh
 echo "" >> $CREATE_PATH/bootstrap-start.sh
 echo "# Use this for Raspberry Pi Codec Zero:" >> $CREATE_PATH/bootstrap-start.sh
 echo "/sbin/alsactl restore -f /opt/secureptt/kenwood.state" >> $CREATE_PATH/bootstrap-start.sh
@@ -649,6 +652,82 @@ echo "RestartSec=5" >> $CREATE_PATH/netmon-tx.service.pc
 }
 
 #
+# dpinger services (dpinger.service & dpinger-monitor.service)
+#
+function create_dpinger_files {
+# dpinger.service
+echo "# $CREATE_PATH/dpinger.service " > $CREATE_PATH/dpinger.service
+echo "[Unit]" >> $CREATE_PATH/dpinger.service
+echo "Description=dpinger for wg0 (server mode, just monitoring)" >> $CREATE_PATH/dpinger.service
+echo "After=multi-user.target" >> $CREATE_PATH/dpinger.service
+echo "Requires=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/dpinger.service
+echo "Wants=dpinger-monitor.service" >> $CREATE_PATH/dpinger.service
+echo " " >> $CREATE_PATH/dpinger.service
+echo "[Service]" >> $CREATE_PATH/dpinger.service
+echo "Type=forking" >> $CREATE_PATH/dpinger.service
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/dpinger.service
+echo "KillMode=process" >> $CREATE_PATH/dpinger.service
+echo "ExecStart=/bin/dpinger -L 10% -i ptt -t 5s -C "/opt/secureptt/alarm.sh" 10.0.0.1" >> $CREATE_PATH/dpinger.service
+echo "Restart=always" >> $CREATE_PATH/dpinger.service
+echo "RestartSec=1" >> $CREATE_PATH/dpinger.service
+echo "TimeoutStartSec=5" >> $CREATE_PATH/dpinger.service
+# dpinger-monitor.service
+echo "# $CREATE_PATH/dpinger-monitor.service " > $CREATE_PATH/dpinger-monitor.service
+echo "[Unit]" >> $CREATE_PATH/dpinger-monitor.service
+echo "Description=dpinger monitor service" >> $CREATE_PATH/dpinger-monitor.service
+echo "After=multi-user.target dpinger.service dpinger-alarm.service" >> $CREATE_PATH/dpinger-monitor.service
+echo "PartOf=dpinger.service" >> $CREATE_PATH/dpinger-monitor.service
+echo "Requires=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/dpinger-monitor.service
+echo " " >> $CREATE_PATH/dpinger-monitor.service
+echo "[Service]" >> $CREATE_PATH/dpinger-monitor.service
+echo "Type=simple" >> $CREATE_PATH/dpinger-monitor.service
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/dpinger-monitor.service
+echo "KillMode=process" >> $CREATE_PATH/dpinger-monitor.service
+echo "ExecStart=/opt/secureptt/monitor.sh" >> $CREATE_PATH/dpinger-monitor.service
+echo "Restart=always" >> $CREATE_PATH/dpinger-monitor.service
+echo "RestartSec=10" >> $CREATE_PATH/dpinger-monitor.service
+echo "TimeoutStartSec=5" >> $CREATE_PATH/dpinger-monitor.service
+# alarm.sh
+echo "#!/bin/sh" > $CREATE_PATH/alarm.sh
+echo "dest_name=\"$1\"" >> $CREATE_PATH/alarm.sh
+echo "dest_addr=\"$2\"" >> $CREATE_PATH/alarm.sh
+echo "alarm_flag=\"$3\"" >> $CREATE_PATH/alarm.sh
+echo "latency_avg=\"$4\"" >> $CREATE_PATH/alarm.sh
+echo "loss_avg=\"$5\"" >> $CREATE_PATH/alarm.sh
+echo "echo \"DEST:$1 ADDR:$2 ALARM_FLAG:$3 LATENCY_AVG:$4 LOSS_AVG:$5\"" >> $CREATE_PATH/alarm.sh
+echo "if [ \"$alarm_flag\" -eq 1 ]" >> $CREATE_PATH/alarm.sh
+echo "then" >> $CREATE_PATH/alarm.sh
+echo "	touch /tmp/alarm" >> $CREATE_PATH/alarm.sh
+echo "else" >> $CREATE_PATH/alarm.sh
+echo "	rm /tmp/alarm" >> $CREATE_PATH/alarm.sh
+echo "fi" >> $CREATE_PATH/alarm.sh
+echo "exit 0" >> $CREATE_PATH/alarm.sh
+
+# monitor.sh
+echo "#!/bin/sh" > $CREATE_PATH/monitor.sh
+echo "while [ 1 ] " >> $CREATE_PATH/monitor.sh
+echo "do" >> $CREATE_PATH/monitor.sh
+echo "	if [ -f /tmp/alarm ]; then" >> $CREATE_PATH/monitor.sh
+echo "	blinkstick-cli --color 50 0 0 --index 0 " >> $CREATE_PATH/monitor.sh
+echo "	sleep 0.5" >> $CREATE_PATH/monitor.sh
+echo "	blinkstick-cli --color 0 0 0 --index 0" >> $CREATE_PATH/monitor.sh
+echo "	sleep 0.5" >> $CREATE_PATH/monitor.sh
+echo "	blinkstick-cli --color 50 0 0 --index 1 " >> $CREATE_PATH/monitor.sh
+echo "	sleep 0.5" >> $CREATE_PATH/monitor.sh
+echo "	blinkstick-cli --color 0 0 0 --index 1" >> $CREATE_PATH/monitor.sh
+echo "	sleep 0.5" >> $CREATE_PATH/monitor.sh
+echo "fi" >> $CREATE_PATH/monitor.sh
+done
+
+
+
+}
+
+
+
+
+
+#
 # Create out key file and counter for it
 #
 # NOTE: After everything works, adopt this to real TRNG source!
@@ -722,6 +801,7 @@ do
  create_netmon_rx_service_file_pc
  create_netmon_tx_service_file
  create_netmon_tx_service_file_pc
+ create_dpinger_files
  copy_templates_in_place
 done
 
