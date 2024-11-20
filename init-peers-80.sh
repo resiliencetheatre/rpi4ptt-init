@@ -22,13 +22,20 @@
 # It is currently hardcoded to use 10.0.0.80 - 10.0.0.83 addresses for
 # nodes, please change that as you like.
 #
+# Note that this script is for latest SecurePTT branch of edgemap [1]
+# which is no longer initramfs image. It has normal rootfs partition
+# where system is persisted. This creates a bit change for approach we
+# used to have for bootstarp.sh with initramfs image type. 
+#
+# [1] https://github.com/resiliencetheatre/rpi4edgemapdisplay/tree/secureptt
+# 
 # NOTE: THIS SCRIPT USES /dev/urandom WHICH IS INSECURE FOR OTP USE!
 #       ADOPT /dev/urandom TO PROPER TRNG SOURCE BEFORE USING THIS
 # 
 # If you're using thinklight (on PC), remember this:
 #  sudo chmod o+w /sys/class/leds/tpacpi::thinklight/brightness
 #
-# Set also network capture permissions
+# Set also network capture permissions for netmon:
 #  sudo setcap cap_net_raw,cap_net_admin+eip /usr/local/bin/netmon
 #
 
@@ -42,7 +49,7 @@ echo "Description=udpproxy in from 10.0.0.8$NODE" >> $CREATE_PATH/proxy-in-$NODE
 echo "After=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/proxy-in-$NODE.service
 echo " " >> $CREATE_PATH/proxy-in-$NODE.service
 echo "[Service]" >> $CREATE_PATH/proxy-in-$NODE.service
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/proxy-in-$NODE.service
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/proxy-in-$NODE.service
 echo "ExecStart=/usr/bin/udpproxy -i proxy-in-$NODE.ini" >> $CREATE_PATH/proxy-in-$NODE.service
 echo "Type=simple" >> $CREATE_PATH/proxy-in-$NODE.service
 echo "Restart=always" >> $CREATE_PATH/proxy-in-$NODE.service
@@ -58,7 +65,7 @@ echo "Description=udpproxy to 10.0.0.8$NODE" >> $CREATE_PATH/proxy-out-$NODE.ser
 echo "After=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/proxy-out-$NODE.service
 echo " " >> $CREATE_PATH/proxy-out-$NODE.service
 echo "[Service]" >> $CREATE_PATH/proxy-out-$NODE.service
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/proxy-out-$NODE.service
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/proxy-out-$NODE.service
 echo "ExecStart=/usr/bin/udpproxy -i proxy-out-$NODE.ini" >> $CREATE_PATH/proxy-out-$NODE.service
 echo "Type=simple" >> $CREATE_PATH/proxy-out-$NODE.service
 echo "Restart=always" >> $CREATE_PATH/proxy-out-$NODE.service
@@ -72,18 +79,17 @@ function create_proxy_in_service_file_pc()  {
 echo "# proxy-in-$NODE.service.pc " > $CREATE_PATH/proxy-in-$NODE.service.pc
 echo "[Unit]" >> $CREATE_PATH/proxy-in-$NODE.service.pc
 echo "Description=udpproxy in from 10.0.0.8$NODE" >> $CREATE_PATH/proxy-in-$NODE.service.pc
-echo "PartOf=ptt.service" >> $CREATE_PATH/proxy-in-$NODE.service.pc
-echo "After=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/proxy-in-$NODE.service.pc
+echo "PartOf=ptt.target" >> $CREATE_PATH/proxy-in-$NODE.service.pc
 echo " " >> $CREATE_PATH/proxy-in-$NODE.service.pc
 echo "[Service]" >> $CREATE_PATH/proxy-in-$NODE.service.pc
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/proxy-in-$NODE.service.pc
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/proxy-in-$NODE.service.pc
 echo "ExecStart=/usr/local/bin/udpproxy -i proxy-in-$NODE.ini" >> $CREATE_PATH/proxy-in-$NODE.service.pc
 echo "Type=simple" >> $CREATE_PATH/proxy-in-$NODE.service.pc
 echo "Restart=always" >> $CREATE_PATH/proxy-in-$NODE.service.pc
 echo "RestartSec=5" >> $CREATE_PATH/proxy-in-$NODE.service.pc
 echo " " >> $CREATE_PATH/proxy-in-$NODE.service.pc
 echo "[Install]" >> $CREATE_PATH/proxy-in-$NODE.service.pc
-echo "WantedBy=ptt.service.pc" >> $CREATE_PATH/proxy-in-$NODE.service.pc
+echo "WantedBy=ptt.target" >> $CREATE_PATH/proxy-in-$NODE.service.pc
 }
 
 #
@@ -92,15 +98,17 @@ echo "WantedBy=ptt.service.pc" >> $CREATE_PATH/proxy-in-$NODE.service.pc
 function create_proxy_out_service_file_pc()  {
 echo "[Unit]" > $CREATE_PATH/proxy-out-$NODE.service.pc
 echo "Description=udpproxy to 10.0.0.8$NODE" >> $CREATE_PATH/proxy-out-$NODE.service.pc
-echo "PartOf=ptt.service" >> $CREATE_PATH/proxy-out-$NODE.service.pc
-echo "After=sys-devices-virtual-net-wg0.device ptt.service" >> $CREATE_PATH/proxy-out-$NODE.service.pc
+echo "PartOf=ptt.target" >> $CREATE_PATH/proxy-out-$NODE.service.pc
 echo " " >> $CREATE_PATH/proxy-out-$NODE.service.pc
 echo "[Service]" >> $CREATE_PATH/proxy-out-$NODE.service.pc
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/proxy-out-$NODE.service.pc
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/proxy-out-$NODE.service.pc
 echo "ExecStart=/usr/local/bin/udpproxy -i proxy-out-$NODE.ini" >> $CREATE_PATH/proxy-out-$NODE.service.pc
 echo "Type=simple" >> $CREATE_PATH/proxy-out-$NODE.service.pc
 echo "Restart=always" >> $CREATE_PATH/proxy-out-$NODE.service.pc
 echo "RestartSec=5" >> $CREATE_PATH/proxy-out-$NODE.service.pc
+echo " " >> $CREATE_PATH/proxy-out-$NODE.service.pc
+echo "[Install]" >> $CREATE_PATH/proxy-out-$NODE.service.pc
+echo "WantedBy=ptt.target" >> $CREATE_PATH/proxy-out-$NODE.service.pc
 }
 
 #
@@ -116,9 +124,9 @@ echo "incoming_port=600$NODE" >> $CREATE_PATH/proxy-in-$NODE.ini
 echo "outgoing_address=127.0.0.1" >> $CREATE_PATH/proxy-in-$NODE.ini
 echo "outgoing_port=2010" >> $CREATE_PATH/proxy-in-$NODE.ini
 echo "outbound_key=/dev/null" >> $CREATE_PATH/proxy-in-$NODE.ini
-echo "inbound_key=/opt/boot/in-$NODE.key" >> $CREATE_PATH/proxy-in-$NODE.ini
+echo "inbound_key=/opt/secureptt/in-$NODE.key" >> $CREATE_PATH/proxy-in-$NODE.ini
 echo "outbound_counter_file=/dev/null" >> $CREATE_PATH/proxy-in-$NODE.ini
-echo "inbound_counter_file=/opt/boot/in-$NODE.count" >> $CREATE_PATH/proxy-in-$NODE.ini
+echo "inbound_counter_file=/opt/secureptt/in-$NODE.count" >> $CREATE_PATH/proxy-in-$NODE.ini
 }
 
 #
@@ -134,9 +142,9 @@ echo "incoming_address=127.0.0.1" >> $CREATE_PATH/proxy-out-$NODE.ini
 echo "incoming_port=600$NODE" >> $CREATE_PATH/proxy-out-$NODE.ini
 echo "outgoing_address=$OUTGOING_ADDRESS" >> $CREATE_PATH/proxy-out-$NODE.ini
 echo "outgoing_port=$OUTGOING_PORT" >> $CREATE_PATH/proxy-out-$NODE.ini
-echo "outbound_key=/opt/boot/out-$NODE.key" >> $CREATE_PATH/proxy-out-$NODE.ini
+echo "outbound_key=/opt/secureptt/out-$NODE.key" >> $CREATE_PATH/proxy-out-$NODE.ini
 echo "inbound_key=/dev/null" >> $CREATE_PATH/proxy-out-$NODE.ini
-echo "outbound_counter_file=/opt/boot/out-$NODE.count" >> $CREATE_PATH/proxy-out-$NODE.ini
+echo "outbound_counter_file=/opt/secureptt/out-$NODE.count" >> $CREATE_PATH/proxy-out-$NODE.ini
 echo "inbound_counter_file=/dev/null" >> $CREATE_PATH/proxy-out-$NODE.ini
 }
 
@@ -146,18 +154,20 @@ echo "inbound_counter_file=/dev/null" >> $CREATE_PATH/proxy-out-$NODE.ini
 function create_bootstrap_file() {
 echo "#!/bin/sh" > $CREATE_PATH/bootstrap.sh
 echo "/bin/blinkstick-cli --color 0 0 200" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/wg0.* /etc/systemd/network/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/wg0.* /etc/systemd/network/" >> $CREATE_PATH/bootstrap.sh
 echo " " >> $CREATE_PATH/bootstrap.sh
 echo "mkdir /opt/wgcap/" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/wgcap_service.conf /opt/wgcap" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/rtptun.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/udp2raw.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/proxy*service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/asound.conf /etc/" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/pttcomm.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/samplicator.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/netmon.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
-echo "cp /opt/boot/netmon-tx.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/wgcap_service.conf /opt/wgcap" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/rtptun.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/udp2raw.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/proxy*service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/asound.conf /etc/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/pttcomm.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/samplicator.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/netmon.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/netmon-tx.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/dpinger.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
+echo "cp /opt/secureptt/dpinger-monitor.service /etc/systemd/system/" >> $CREATE_PATH/bootstrap.sh
 echo " " >> $CREATE_PATH/bootstrap.sh
 echo "systemctl daemon-reload" >> $CREATE_PATH/bootstrap.sh
 # sleep 5
@@ -171,13 +181,52 @@ echo "systemctl restart pttcomm" >> $CREATE_PATH/bootstrap.sh
 echo "systemctl restart samplicator.service" >> $CREATE_PATH/bootstrap.sh
 echo "systemctl restart netmon" >> $CREATE_PATH/bootstrap.sh
 echo "systemctl restart netmon-tx" >> $CREATE_PATH/bootstrap.sh
-echo "# Comment this out if not using Raspberry Pi Codec Zero:" >> $CREATE_PATH/bootstrap.sh
-echo "/sbin/alsactl restore -f /opt/boot/Codec_Zero_OnboardMIC_record_and_SPK_playback.state" >> $CREATE_PATH/bootstrap.sh
+echo "# Use this for Raspberry Pi Codec Zero:" >> $CREATE_PATH/bootstrap.sh
+echo "/sbin/alsactl restore -f /opt/secureptt/kenwood.state" >> $CREATE_PATH/bootstrap.sh
+echo "# Use this if you're on USB attached headset" >> $CREATE_PATH/bootstrap.sh
+echo "# /sbin/alsactl restore -f /opt/secureptt/usb-headset.state" >> $CREATE_PATH/bootstrap.sh
 echo "sleep 1" >> $CREATE_PATH/bootstrap.sh
-echo "aplay /opt/boot/notify.wav" >> $CREATE_PATH/bootstrap.sh
+echo "aplay /opt/secureptt/notify.wav" >> $CREATE_PATH/bootstrap.sh
 echo "/bin/blinkstick-cli --color 0 0 0" >> $CREATE_PATH/bootstrap.sh
+echo "chmod +x /opt/secureptt/*.sh" >> $CREATE_PATH/bootstrap.sh
 echo "exit 0" >> $CREATE_PATH/bootstrap.sh
 chmod +x $CREATE_PATH/bootstrap.sh
+}
+
+#
+# bootstrap-start.sh
+#
+function create_bootstrap_start_file() {
+echo "#!/bin/sh" > $CREATE_PATH/bootstrap-start.sh
+echo "#" >> $CREATE_PATH/bootstrap-start.sh
+echo "# Non initramfs version of SecurePTT" >> $CREATE_PATH/bootstrap-start.sh 
+echo "#" >> $CREATE_PATH/bootstrap-start.sh
+echo "# Startup script" >> $CREATE_PATH/bootstrap-start.sh
+echo "#" >> $CREATE_PATH/bootstrap-start.sh
+echo "#" >> $CREATE_PATH/bootstrap-start.sh
+echo "/bin/blinkstick-cli --color 0 0 200" >> $CREATE_PATH/bootstrap-start.sh
+echo " " >> $CREATE_PATH/bootstrap-start.sh
+echo "cd /etc/systemd/system/" >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart udp2raw" >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart systemd-networkd" >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart proxy-out-*.service" >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart proxy-in-*.service " >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart pttcomm" >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart samplicator.service" >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart netmon" >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart netmon-tx" >> $CREATE_PATH/bootstrap-start.sh
+echo "systemctl restart dpinger" >> $CREATE_PATH/bootstrap-start.sh
+echo "" >> $CREATE_PATH/bootstrap-start.sh
+echo "# Use this for Raspberry Pi Codec Zero:" >> $CREATE_PATH/bootstrap-start.sh
+echo "/sbin/alsactl restore -f /opt/secureptt/kenwood.state" >> $CREATE_PATH/bootstrap-start.sh
+echo "# Use this if you're on USB attached headset" >> $CREATE_PATH/bootstrap-start.sh
+echo "# /sbin/alsactl restore -f /opt/secureptt/usb-headset.state" >> $CREATE_PATH/bootstrap-start.sh
+echo "sleep 1" >> $CREATE_PATH/bootstrap-start.sh
+echo "aplay /opt/secureptt/notify.wav" >> $CREATE_PATH/bootstrap-start.sh
+echo "/bin/blinkstick-cli --color 0 0 0" >> $CREATE_PATH/bootstrap-start.sh
+echo "cd" >> $CREATE_PATH/bootstrap-start.sh
+echo "exit 0" >> $CREATE_PATH/bootstrap-start.sh
+chmod +x $CREATE_PATH/bootstrap-start.sh
 }
 
 #
@@ -200,14 +249,32 @@ echo "# Drop .pc and move service files in place" >> $CREATE_PATH/bootstrap-pc.s
 echo "TARGET_FILE=`echo \"/etc/systemd/system/${file}\" | cut -d"." -f1-2`" >> $CREATE_PATH/bootstrap-pc.sh
 echo "sudo cp \$file \$TARGET_FILE" >> $CREATE_PATH/bootstrap-pc.sh
 echo "done" >> $CREATE_PATH/bootstrap-pc.sh
+echo "# Remove .pc extension from service files" >> $CREATE_PATH/bootstrap-pc.sh
+echo "for file in /etc/systemd/system/*.pc; do" >> $CREATE_PATH/bootstrap-pc.sh
+echo "sudo mv \"\$file\" \"\${file%.pc}\" " >> $CREATE_PATH/bootstrap-pc.sh
+echo "done" >> $CREATE_PATH/bootstrap-pc.sh
 echo " " >> $CREATE_PATH/bootstrap-pc.sh
-echo "cp /opt/boot/pttkey.ini.pc /opt/boot/pttkey.ini " >> $CREATE_PATH/bootstrap-pc.sh
+echo "cp /opt/secureptt/pttkey.ini.pc /opt/secureptt/pttkey.ini " >> $CREATE_PATH/bootstrap-pc.sh
 echo " " >> $CREATE_PATH/bootstrap-pc.sh
 echo "# Copy WG" >> $CREATE_PATH/bootstrap-pc.sh
 echo "sudo cp wg0.net* /etc/systemd/network/" >> $CREATE_PATH/bootstrap-pc.sh
 echo " " >> $CREATE_PATH/bootstrap-pc.sh
 echo "sudo systemctl daemon-reload" >> $CREATE_PATH/bootstrap-pc.sh
 echo "sudo systemctl restart systemd-networkd" >> $CREATE_PATH/bootstrap-pc.sh
+echo "cd /etc/systemd/system/" >> $CREATE_PATH/bootstrap-pc.sh
+echo "sudo systemctl enable proxy-*" >> $CREATE_PATH/bootstrap-pc.sh
+echo "sudo systemctl enable netmon*" >> $CREATE_PATH/bootstrap-pc.sh
+echo "sudo systemctl enable samplicator.service" >> $CREATE_PATH/bootstrap-pc.sh
+echo "sudo systemctl enable pttcomm.service" >> $CREATE_PATH/bootstrap-pc.sh
+echo "sudo systemctl enable ptt" >> $CREATE_PATH/bootstrap-pc.sh
+echo "sudo systemctl daemon-reload" >> $CREATE_PATH/bootstrap-pc.sh
+echo "echo \"\" " >> $CREATE_PATH/bootstrap-pc.sh
+echo "echo \" You can start and stop SecurePTT with:\"" >> $CREATE_PATH/bootstrap-pc.sh
+echo " echo \" \" " >> $CREATE_PATH/bootstrap-pc.sh
+echo " echo \"sudo systemctl start ptt.target\"" >> $CREATE_PATH/bootstrap-pc.sh
+echo " echo \"sudo systemctl stop ptt.target\"" >> $CREATE_PATH/bootstrap-pc.sh
+echo " echo \" \" " >> $CREATE_PATH/bootstrap-pc.sh
+chmod +x $CREATE_PATH/bootstrap-pc.sh
 }
 
 #
@@ -360,7 +427,7 @@ echo "Type=forking" >> $CREATE_PATH/samplicator.service
 echo "Restart=always" >> $CREATE_PATH/samplicator.service
 echo "RestartSec=10" >> $CREATE_PATH/samplicator.service
 echo "TimeoutStartSec=5" >> $CREATE_PATH/samplicator.service
-echo "ExecStart=/bin/samplicate -c /opt/boot/samplicator.conf -d 0 -f" >> $CREATE_PATH/samplicator.service
+echo "ExecStart=/bin/samplicate -c /opt/secureptt/samplicator.conf -d 0 -f" >> $CREATE_PATH/samplicator.service
 }
 
 #
@@ -369,7 +436,7 @@ echo "ExecStart=/bin/samplicate -c /opt/boot/samplicator.conf -d 0 -f" >> $CREAT
 function create_samplicator_service_pc {
 echo "[Unit]" > $CREATE_PATH/samplicator.service.pc
 echo "Description=Samplicator" >> $CREATE_PATH/samplicator.service.pc
-echo "PartOf=ptt.service" >> $CREATE_PATH/samplicator.service.pc
+echo "PartOf=ptt.target" >> $CREATE_PATH/samplicator.service.pc
 echo "After=network.target ptt.service" >> $CREATE_PATH/samplicator.service.pc
 echo " " >> $CREATE_PATH/samplicator.service.pc
 echo "[Service]" >> $CREATE_PATH/samplicator.service.pc
@@ -377,10 +444,10 @@ echo "Type=forking" >> $CREATE_PATH/samplicator.service.pc
 echo "Restart=always" >> $CREATE_PATH/samplicator.service.pc
 echo "RestartSec=10" >> $CREATE_PATH/samplicator.service.pc
 echo "TimeoutStartSec=5" >> $CREATE_PATH/samplicator.service.pc
-echo "ExecStart=/usr/local/bin/samplicate -c /opt/boot/samplicator.conf -d 0 -f" >> $CREATE_PATH/samplicator.service.pc
+echo "ExecStart=/usr/local/bin/samplicate -c /opt/secureptt/samplicator.conf -d 0 -f" >> $CREATE_PATH/samplicator.service.pc
 echo " " >> $CREATE_PATH/samplicator.service.pc
 echo "[Install]" >> $CREATE_PATH/samplicator.service.pc
-echo "WantedBy=ptt.service" >> $CREATE_PATH/samplicator.service.pc
+echo "WantedBy=ptt.target" >> $CREATE_PATH/samplicator.service.pc
 }
 
 #
@@ -393,7 +460,7 @@ echo "Description=pttcomm service" >> $CREATE_PATH/pttcomm.service
 echo "After=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/pttcomm.service
 echo " " >> $CREATE_PATH/pttcomm.service
 echo "[Service]" >> $CREATE_PATH/pttcomm.service
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/pttcomm.service
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/pttcomm.service
 echo "ExecStart=/usr/bin/pttcomm -l" >> $CREATE_PATH/pttcomm.service
 echo "Type=simple" >> $CREATE_PATH/pttcomm.service
 echo "Restart=always" >> $CREATE_PATH/pttcomm.service
@@ -407,21 +474,21 @@ function create_pttcomm_service_pc {
 echo "# $CREATE_PATH/pttcomm.service.pc " > $CREATE_PATH/pttcomm.service.pc
 echo "[Unit]" >> $CREATE_PATH/pttcomm.service.pc
 echo "Description=pttcomm service" >> $CREATE_PATH/pttcomm.service.pc
-echo "PartOf=ptt.service" >> $CREATE_PATH/pttcomm.service.pc
+echo "PartOf=ptt.target" >> $CREATE_PATH/pttcomm.service.pc
 echo "After=sys-devices-virtual-net-wg0.device ptt.service" >> $CREATE_PATH/pttcomm.service.pc
 echo " " >> $CREATE_PATH/pttcomm.service.pc
 echo "[Service]" >> $CREATE_PATH/pttcomm.service.pc
 echo "User=tech" >> $CREATE_PATH/pttcomm.service.pc
 echo "Environment=\"XDG_RUNTIME_DIR=/run/user/1000\"" >> $CREATE_PATH/pttcomm.service.pc
 echo "Environment=\"PULSE_RUNTIME_PATH=/run/user/1000/pulse/\"" >> $CREATE_PATH/pttcomm.service.pc
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/pttcomm.service.pc
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/pttcomm.service.pc
 echo "ExecStart=/usr/local/bin/pttcomm -l" >> $CREATE_PATH/pttcomm.service.pc
 echo "Type=simple" >> $CREATE_PATH/pttcomm.service.pc
 echo "Restart=always" >> $CREATE_PATH/pttcomm.service.pc
 echo "RestartSec=5" >> $CREATE_PATH/pttcomm.service.pc
 echo " " >> $CREATE_PATH/pttcomm.service.pc
 echo "[Install]" >> $CREATE_PATH/pttcomm.service.pc
-echo "WantedBy=ptt.service" >> $CREATE_PATH/pttcomm.service.pc
+echo "WantedBy=ptt.target" >> $CREATE_PATH/pttcomm.service.pc
 }
 
 #
@@ -443,6 +510,13 @@ echo "[Install]" >> $CREATE_PATH/ptt.service.pc
 echo "# Components of this application should be started at boot time" >> $CREATE_PATH/ptt.service.pc
 echo "WantedBy=multi-user.target" >> $CREATE_PATH/ptt.service.pc
 }
+
+# ptt.target (only for PC)
+function create_ptt_target_pc {
+echo "[Unit]" > $CREATE_PATH/ptt.target.pc
+echo "Description=Custom target for PTT services" >> $CREATE_PATH/ptt.target.pc
+}
+
 
 #
 # asound.conf
@@ -484,8 +558,8 @@ function create_netmon_rx_ini {
 echo "[netmon]" > $CREATE_PATH/netmon.ini
 echo "network_device=lo" >> $CREATE_PATH/netmon.ini
 echo "capturefilter=\"port 2010 or port 2011 or port 2012\"" >> $CREATE_PATH/netmon.ini # TODO
-echo "rx_start_command=/opt/boot/rx-on.sh" >> $CREATE_PATH/netmon.ini
-echo "rx_end_command=/opt/boot/rx-off.sh" >> $CREATE_PATH/netmon.ini
+echo "rx_start_command=/opt/secureptt/rx-on.sh" >> $CREATE_PATH/netmon.ini
+echo "rx_end_command=/opt/secureptt/rx-off.sh" >> $CREATE_PATH/netmon.ini
 echo "trigger_port=2010" >> $CREATE_PATH/netmon.ini
 }
 
@@ -495,12 +569,17 @@ echo "trigger_port=2010" >> $CREATE_PATH/netmon.ini
 function create_rx_shell_sciprts {
 echo "#!/bin/sh" > $CREATE_PATH/rx-on.sh
 echo "blinkstick-cli --color 200 0 0" >> $CREATE_PATH/rx-on.sh
+echo "echo -n \"rx-on\" > /tmp/secureptt" >> $CREATE_PATH/rx-on.sh
 echo "# echo 1 > /sys/class/leds/tpacpi::thinklight/brightness" >> $CREATE_PATH/rx-on.sh
 echo "exit 0" >> $CREATE_PATH/rx-on.sh
+
 echo "#!/bin/sh" > $CREATE_PATH/rx-off.sh
 echo "blinkstick-cli --color 0 0 0" >> $CREATE_PATH/rx-off.sh
+echo "echo -n \"rx-off\" > /tmp/secureptt" >> $CREATE_PATH/rx-off.sh
 echo "# echo 0 > /sys/class/leds/tpacpi::thinklight/brightness" >> $CREATE_PATH/rx-off.sh
 echo "exit 0" >> $CREATE_PATH/rx-off.sh
+
+chmod +x $CREATE_PATH/rx*.sh
 }
 
 #
@@ -510,8 +589,8 @@ function create_netmon_tx_ini {
 echo "[netmon]" > $CREATE_PATH/netmon-tx.ini
 echo "network_device=lo" >> $CREATE_PATH/netmon-tx.ini
 echo "capturefilter=\"port 2000\"" >> $CREATE_PATH/netmon-tx.ini # TODO
-echo "rx_start_command=/opt/boot/tx-on.sh" >> $CREATE_PATH/netmon-tx.ini
-echo "rx_end_command=/opt/boot/tx-off.sh" >> $CREATE_PATH/netmon-tx.ini
+echo "rx_start_command=/opt/secureptt/tx-on.sh" >> $CREATE_PATH/netmon-tx.ini
+echo "rx_end_command=/opt/secureptt/tx-off.sh" >> $CREATE_PATH/netmon-tx.ini
 echo "trigger_port=2010" >> $CREATE_PATH/netmon-tx.ini
 }
 
@@ -521,12 +600,17 @@ echo "trigger_port=2010" >> $CREATE_PATH/netmon-tx.ini
 function create_tx_shell_sciprts {
 echo "#!/bin/sh" > $CREATE_PATH/tx-on.sh
 echo "blinkstick-cli --color 0 200 0 --index 1" >> $CREATE_PATH/tx-on.sh
+echo "echo -n \"tx-on\" > /tmp/secureptt" >> $CREATE_PATH/tx-on.sh
 echo "# echo 1 > /sys/class/leds/tpacpi::thinklight/brightness" >> $CREATE_PATH/tx-on.sh
 echo "exit 0" >> $CREATE_PATH/tx-on.sh
+# off
 echo "#!/bin/sh" > $CREATE_PATH/tx-off.sh
 echo "blinkstick-cli --color 0 0 0 --index 1" >> $CREATE_PATH/tx-off.sh
+echo "echo -n \"tx-off\" > /tmp/secureptt" >> $CREATE_PATH/tx-off.sh
 echo "# echo 0 > /sys/class/leds/tpacpi::thinklight/brightness" >> $CREATE_PATH/tx-off.sh
 echo "exit 0" >> $CREATE_PATH/tx-off.sh
+
+chmod +x $CREATE_PATH/tx*.sh
 }
 
 #
@@ -539,7 +623,7 @@ echo "Description=netmon service" >> $CREATE_PATH/netmon.service
 echo "After=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/netmon.service
 echo " " >> $CREATE_PATH/netmon.service
 echo "[Service]" >> $CREATE_PATH/netmon.service
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/netmon.service
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/netmon.service
 echo "ExecStart=/bin/netmon -i netmon.ini" >> $CREATE_PATH/netmon.service
 echo "Type=simple" >> $CREATE_PATH/netmon.service
 echo "Restart=always" >> $CREATE_PATH/netmon.service
@@ -553,14 +637,18 @@ function create_netmon_rx_service_file_pc {
 echo "# $CREATE_PATH/netmon.service.pc " > $CREATE_PATH/netmon.service.pc
 echo "[Unit]" >> $CREATE_PATH/netmon.service.pc
 echo "Description=netmon service" >> $CREATE_PATH/netmon.service.pc
+echo "PartOf=ptt.target" >> $CREATE_PATH/netmon.service.pc
 echo "After=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/netmon.service.pc
 echo " " >> $CREATE_PATH/netmon.service.pc
 echo "[Service]" >> $CREATE_PATH/netmon.service.pc
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/netmon.service.pc
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/netmon.service.pc
 echo "ExecStart=/usr/local/bin/netmon -i netmon.ini" >> $CREATE_PATH/netmon.service.pc
 echo "Type=simple" >> $CREATE_PATH/netmon.service.pc
 echo "Restart=always" >> $CREATE_PATH/netmon.service.pc
 echo "RestartSec=5" >> $CREATE_PATH/netmon.service.pc
+echo " " >> $CREATE_PATH/netmon.service.pc
+echo "[Install]" >> $CREATE_PATH/netmon.service.pc
+echo "WantedBy=ptt.target" >> $CREATE_PATH/netmon.service.pc
 }
 
 #
@@ -570,10 +658,11 @@ function create_netmon_tx_service_file {
 echo "# $CREATE_PATH/netmon-tx.service " > $CREATE_PATH/netmon-tx.service
 echo "[Unit]" >> $CREATE_PATH/netmon-tx.service
 echo "Description=netmon tx service" >> $CREATE_PATH/netmon-tx.service
+echo "PartOf=ptt.target" >> $CREATE_PATH/netmon-tx.service.pc
 echo "After=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/netmon-tx.service
 echo " " >> $CREATE_PATH/netmon-tx.service
 echo "[Service]" >> $CREATE_PATH/netmon-tx.service
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/netmon-tx.service
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/netmon-tx.service
 echo "ExecStart=/bin/netmon -i netmon-tx.ini" >> $CREATE_PATH/netmon-tx.service
 echo "Type=simple" >> $CREATE_PATH/netmon-tx.service
 echo "Restart=always" >> $CREATE_PATH/netmon-tx.service
@@ -590,12 +679,91 @@ echo "Description=netmon tx service" >> $CREATE_PATH/netmon-tx.service.pc
 echo "After=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/netmon-tx.service.pc
 echo " " >> $CREATE_PATH/netmon-tx.service.pc
 echo "[Service]" >> $CREATE_PATH/netmon-tx.service.pc
-echo "WorkingDirectory=/opt/boot" >> $CREATE_PATH/netmon-tx.service.pc
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/netmon-tx.service.pc
 echo "ExecStart=/usr/local/bin/netmon -i netmon-tx.ini" >> $CREATE_PATH/netmon-tx.service.pc
 echo "Type=simple" >> $CREATE_PATH/netmon-tx.service.pc
 echo "Restart=always" >> $CREATE_PATH/netmon-tx.service.pc
 echo "RestartSec=5" >> $CREATE_PATH/netmon-tx.service.pc
+echo " " >> $CREATE_PATH/netmon-tx.service.pc
+echo "[Install]" >> $CREATE_PATH/netmon-tx.service.pc
+echo "WantedBy=ptt.target" >> $CREATE_PATH/netmon-tx.service.pc
 }
+
+#
+# dpinger services (dpinger.service & dpinger-monitor.service)
+#
+function create_dpinger_files {
+# dpinger.service
+echo "# $CREATE_PATH/dpinger.service " > $CREATE_PATH/dpinger.service
+echo "[Unit]" >> $CREATE_PATH/dpinger.service
+echo "Description=dpinger for wg0 (server mode, just monitoring)" >> $CREATE_PATH/dpinger.service
+echo "After=multi-user.target" >> $CREATE_PATH/dpinger.service
+echo "Requires=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/dpinger.service
+echo "Wants=dpinger-monitor.service" >> $CREATE_PATH/dpinger.service
+echo " " >> $CREATE_PATH/dpinger.service
+echo "[Service]" >> $CREATE_PATH/dpinger.service
+echo "Type=forking" >> $CREATE_PATH/dpinger.service
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/dpinger.service
+echo "KillMode=process" >> $CREATE_PATH/dpinger.service
+echo "ExecStart=/bin/dpinger -L 10% -i ptt -t 5s -C "/opt/secureptt/alarm.sh" 10.0.0.1" >> $CREATE_PATH/dpinger.service
+echo "Restart=always" >> $CREATE_PATH/dpinger.service
+echo "RestartSec=1" >> $CREATE_PATH/dpinger.service
+echo "TimeoutStartSec=5" >> $CREATE_PATH/dpinger.service
+# dpinger-monitor.service
+echo "# $CREATE_PATH/dpinger-monitor.service " > $CREATE_PATH/dpinger-monitor.service
+echo "[Unit]" >> $CREATE_PATH/dpinger-monitor.service
+echo "Description=dpinger monitor service" >> $CREATE_PATH/dpinger-monitor.service
+echo "After=multi-user.target dpinger.service dpinger-alarm.service" >> $CREATE_PATH/dpinger-monitor.service
+echo "PartOf=dpinger.service" >> $CREATE_PATH/dpinger-monitor.service
+echo "Requires=sys-devices-virtual-net-wg0.device" >> $CREATE_PATH/dpinger-monitor.service
+echo " " >> $CREATE_PATH/dpinger-monitor.service
+echo "[Service]" >> $CREATE_PATH/dpinger-monitor.service
+echo "Type=simple" >> $CREATE_PATH/dpinger-monitor.service
+echo "WorkingDirectory=/opt/secureptt" >> $CREATE_PATH/dpinger-monitor.service
+echo "KillMode=process" >> $CREATE_PATH/dpinger-monitor.service
+echo "ExecStart=/opt/secureptt/monitor.sh" >> $CREATE_PATH/dpinger-monitor.service
+echo "Restart=always" >> $CREATE_PATH/dpinger-monitor.service
+echo "RestartSec=10" >> $CREATE_PATH/dpinger-monitor.service
+echo "TimeoutStartSec=5" >> $CREATE_PATH/dpinger-monitor.service
+# alarm.sh
+echo "#!/bin/sh" > $CREATE_PATH/alarm.sh
+echo "dest_name=\"$1\"" >> $CREATE_PATH/alarm.sh
+echo "dest_addr=\"$2\"" >> $CREATE_PATH/alarm.sh
+echo "alarm_flag=\"$3\"" >> $CREATE_PATH/alarm.sh
+echo "latency_avg=\"$4\"" >> $CREATE_PATH/alarm.sh
+echo "loss_avg=\"$5\"" >> $CREATE_PATH/alarm.sh
+echo "echo \"DEST:$1 ADDR:$2 ALARM_FLAG:$3 LATENCY_AVG:$4 LOSS_AVG:$5\"" >> $CREATE_PATH/alarm.sh
+echo "if [ \"$alarm_flag\" -eq 1 ]" >> $CREATE_PATH/alarm.sh
+echo "then" >> $CREATE_PATH/alarm.sh
+echo "	touch /tmp/alarm" >> $CREATE_PATH/alarm.sh
+echo "else" >> $CREATE_PATH/alarm.sh
+echo "	rm /tmp/alarm" >> $CREATE_PATH/alarm.sh
+echo "fi" >> $CREATE_PATH/alarm.sh
+echo "exit 0" >> $CREATE_PATH/alarm.sh
+
+# monitor.sh
+echo "#!/bin/sh" > $CREATE_PATH/monitor.sh
+echo "while [ 1 ] " >> $CREATE_PATH/monitor.sh
+echo "do" >> $CREATE_PATH/monitor.sh
+echo "	if [ -f /tmp/alarm ]; then" >> $CREATE_PATH/monitor.sh
+echo "	blinkstick-cli --color 50 0 0 --index 0 " >> $CREATE_PATH/monitor.sh
+echo "	sleep 0.5" >> $CREATE_PATH/monitor.sh
+echo "	blinkstick-cli --color 0 0 0 --index 0" >> $CREATE_PATH/monitor.sh
+echo "	sleep 0.5" >> $CREATE_PATH/monitor.sh
+echo "	blinkstick-cli --color 50 0 0 --index 1 " >> $CREATE_PATH/monitor.sh
+echo "	sleep 0.5" >> $CREATE_PATH/monitor.sh
+echo "	blinkstick-cli --color 0 0 0 --index 1" >> $CREATE_PATH/monitor.sh
+echo "	sleep 0.5" >> $CREATE_PATH/monitor.sh
+echo "fi" >> $CREATE_PATH/monitor.sh
+
+
+
+
+}
+
+
+
+
 
 #
 # Create out key file and counter for it
@@ -663,6 +831,7 @@ do
  create_pttcomm_service_pc
  create_asound_conf_file
  create_ptt_service_pc
+ create_ptt_target_pc
  create_netmon_rx_ini
  create_rx_shell_sciprts
  create_netmon_tx_ini
@@ -671,6 +840,7 @@ do
  create_netmon_rx_service_file_pc
  create_netmon_tx_service_file
  create_netmon_tx_service_file_pc
+ create_dpinger_files
  copy_templates_in_place
 done
 
