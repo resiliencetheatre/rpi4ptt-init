@@ -254,6 +254,7 @@ echo "for file in /etc/systemd/system/*.pc; do" >> $CREATE_PATH/bootstrap-pc.sh
 echo "sudo mv \"\$file\" \"\${file%.pc}\" " >> $CREATE_PATH/bootstrap-pc.sh
 echo "done" >> $CREATE_PATH/bootstrap-pc.sh
 echo " " >> $CREATE_PATH/bootstrap-pc.sh
+echo "sudo cp /opt/secureptt/ptt.target.pc /etc/systemd/system/ptt.target " >> $CREATE_PATH/bootstrap-pc.sh
 echo "cp /opt/secureptt/pttkey.ini.pc /opt/secureptt/pttkey.ini " >> $CREATE_PATH/bootstrap-pc.sh
 echo " " >> $CREATE_PATH/bootstrap-pc.sh
 echo "# Copy WG" >> $CREATE_PATH/bootstrap-pc.sh
